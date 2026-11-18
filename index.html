@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LeArm AI (ESP32) Web Controller</title>
+  <style>
+    :root {
+      --bg: #0f1115;
+      --card: #181b22;
+      --card-alt: #20242e;
+      --border: #2c3240;
+      --text: #eef1f6;
+      --muted: #9aa3b2;
+      --blue: #2563eb;
+      --blue-hover: #3b82f6;
+      --green: #16a34a;
+      --red: #dc2626;
+      --amber: #f59e0b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 20px 16px 48px;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.4;
+    }
+    .container { max-width: 960px; margin: 0 auto; }
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    h1 { font-size: 1.35rem; margin: 0; }
+    .badge {
+      padding: 5px 11px;
+      border-radius: 999px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      background: #2b2112;
+      color: var(--amber);
+      border: 1px solid #523b18;
+    }
+    .badge.ok {
+      background: #102a1c;
+      color: #4ade80;
+      border-color: #1f5436;
+    }
+    .steps {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 0.86rem;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+    .steps strong { color: var(--text); }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 18px;
+    }
+    button, select {
+      font-family: inherit;
+      font-size: 0.88rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      padding: 9px 14px;
+      color: var(--text);
+      background: var(--card-alt);
+      cursor: pointer;
+    }
+    button { font-weight: 600; border: none; }
+    button:hover:not(:disabled) { filter: brightness(1.12); }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-primary { background: var(--blue); }
+    .btn-success { background: var(--green); }
+    .btn-danger { background: var(--red); }
+    .btn-secondary { background: #2e3442; }
+    .btn-sm { padding: 5px 9px; font-size: 0.78rem; border-radius: 6px; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 780px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+    }
+    .panel h2 {
+      font-size: 0.98rem;
+      margin: 0 0 12px;
+      color: #cbd5e1;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .joint {
+      background: var(--card-alt);
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+    }
+    .joint:last-child { margin-bottom: 0; }
+    .joint-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+      font-size: 0.88rem;
+    }
+    .joint-val {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-weight: 700;
+      color: #60a5fa;
+    }
+    .joint-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    input[type="range"] {
+      flex: 1;
+      accent-color: #3b82f6;
+      cursor: pointer;
+      height: 6px;
+    }
+    .hex-box {
+      background: #0b0d10;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.8rem;
+      color: #38bdf8;
+      word-break: break-all;
+      margin-bottom: 10px;
+    }
+    .log {
+      background: #0b0d10;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 10px;
+      height: 135px;
+      overflow-y: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.76rem;
+      color: #94a3b8;
+    }
+    .log div { margin-bottom: 4px; }
+    .pose-list {
+      max-height: 170px;
+      overflow-y: auto;
+      margin: 10px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .pose-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--card-alt);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 6px 10px;
+      font-size: 0.82rem;
+    }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .mt { margin-top: 14px; }
+    label.chk { font-size: 0.83rem; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>LeArm AI (ESP32) Web Controller</h1>
+      <span id="statusBadge" class="badge">Disconnected</span>
+    </header>
+
+    <div class="steps">
+      <strong>Quick Start:</strong>
+      1. Turn ON the arm's <strong>7.5V DC power switch</strong> &nbsp;→&nbsp;
+      2. Plug in <strong>USB-C</strong> &amp; click <strong>Connect USB-C</strong> (9600 baud) &nbsp;→&nbsp;
+      3. Press <strong>K1 twice</strong> on the main board until you hear <strong>2 short beeps</strong>.
+    </div>
+
+    <div class="toolbar">
+      <button id="connectBtn" class="btn-primary">Connect USB-C</button>
+      <select id="servoMode" title="Servo Protocol Range">
+        <option value="bus" selected>Bus Servos (0 – 1000)</option>
+        <option value="pwm">PWM Servos (500 – 2500)</option>
+      </select>
+      <select id="moveSpeed" title="Movement Duration">
+        <option value="250">Fast (250 ms)</option>
+        <option value="600" selected>Normal (600 ms)</option>
+        <option value="1200">Smooth (1200 ms)</option>
+      </select>
+      <button id="centerAllBtn" class="btn-secondary">Center All</button>
+      <button id="relaxBtn" class="btn-danger">Relax Motors</button>
+    </div>
+
+    <div class="grid">
+      <!-- Left Column: 6 Joint Sliders -->
+      <div class="panel">
+        <h2>
+          <span>Joint Sliders (ID 1 – 6)</span>
+          <span style="font-size:0.78rem;color:var(--muted);font-weight:400;">Drag or nudge</span>
+        </h2>
+        <div id="slidersContainer"></div>
+      </div>
+
+      <!-- Right Column: Sequencer, Presets & HEX Monitor -->
+      <div style="display:flex;flex-direction:column;gap:16px;">
+        <div class="panel">
+          <h2>Pose Sequencer</h2>
+          <div class="row">
+            <button id="savePoseBtn" class="btn-secondary btn-sm">+ Save Current Pose</button>
+            <button id="playSeqBtn" class="btn-success btn-sm">Play Sequence</button>
+            <button id="stopSeqBtn" class="btn-danger btn-sm" disabled>Stop</button>
+            <label class="chk"><input type="checkbox" id="loopSeq"> Loop</label>
+          </div>
+          <div id="poseList" class="pose-list">
+            <div style="color:var(--muted);font-size:0.82rem;">No poses saved yet. Move sliders and click "+ Save Current Pose".</div>
+          </div>
+          <div class="row">
+            <button id="clearPosesBtn" class="btn-secondary btn-sm">Clear Poses</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Built-in Action Groups</h2>
+          <div class="row" id="groupBtns"></div>
+        </div>
+
+        <div class="panel">
+          <h2>
+            <span>Latest HEX Packet</span>
+            <button id="copyHexBtn" class="btn-secondary btn-sm">Copy HEX</button>
+          </h2>
+          <div id="latestHex" class="hex-box">55 55 16 03 06 58 02 01 F4 01 02 F4 01 03 F4 01 04 F4 01 05 F4 01 06 F4 01</div>
+          <div id="serialLog" class="log"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const JOINTS = [
+      { id: 1, name: "ID 1 — Gripper (Claw)" },
+      { id: 2, name: "ID 2 — Wrist Rotate" },
+      { id: 3, name: "ID 3 — Wrist Pitch" },
+      { id: 4, name: "ID 4 — Elbow" },
+      { id: 5, name: "ID 5 — Shoulder" },
+      { id: 6, name: "ID 6 — Base Rotate" }
+    ];
+
+    let port = null;
+    let writeQueue = Promise.resolve();
+    let lastThrottle = 0;
+    let savedPoses = [];
+    let isPlaying = false;
+
+    const statusBadge = document.getElementById("statusBadge");
+    const connectBtn = document.getElementById("connectBtn");
+    const servoModeEl = document.getElementById("servoMode");
+    const moveSpeedEl = document.getElementById("moveSpeed");
+    const slidersContainer = document.getElementById("slidersContainer");
+    const latestHexEl = document.getElementById("latestHex");
+    const serialLogEl = document.getElementById("serialLog");
+    const poseListEl = document.getElementById("poseList");
+
+    function getRange() {
+      return servoModeEl.value === "bus"
+        ? { min: 0, max: 1000, mid: 500, step: 25 }
+        : { min: 500, max: 2500, mid: 1500, step: 50 };
+    }
+
+    function toHex(bytes) {
+      return Array.from(bytes).map(b => b.toString(16).toUpperCase().padStart(2, "0")).join(" ");
+    }
+
+    function logMsg(text) {
+      const line = document.createElement("div");
+      const time = new Date().toLocaleTimeString([], { hour12: false });
+      line.textContent = `[${time}] ${text}`;
+      serialLogEl.prepend(line);
+      if (serialLogEl.children.length > 40) {
+        serialLogEl.removeChild(serialLogEl.lastChild);
+      }
+    }
+
+    function sendPacket(bytes) {
+      const hexStr = toHex(bytes);
+      latestHexEl.textContent = hexStr;
+
+      if (!port || !port.writable) {
+        logMsg(`(Offline Preview) ${hexStr}`);
+        return;
+      }
+
+      writeQueue = writeQueue.then(async () => {
+        const writer = port.writable.getWriter();
+        try {
+          await writer.write(new Uint8Array(bytes));
+          logMsg(`TX -> ${hexStr}`);
+        } finally {
+          writer.releaseLock();
+        }
+      }).catch(err => {
+        logMsg(`Error: ${err.message}`);
+        setConnectedUI(false);
+      });
+    }
+
+    // Verified Hiwonder 0x55 0x55 Protocol Packets (Exact Length Bytes)
+    function moveSingleServo(id, pos, durationMs) {
+      // Length = 0x07 (1 cmd + 1 count + 2 time + 1 id + 2 pos)
+      sendPacket([
+        0x55, 0x55, 0x07, 0x03, 0x01,
+        durationMs & 0xFF, (durationMs >> 8) & 0xFF,
+        id,
+        pos & 0xFF, (pos >> 8) & 0xFF
+      ]);
+    }
+
+    function moveAllServos(positionsMap, durationMs) {
+      // Length = 0x16 (22 bytes: 1 cmd + 1 count + 2 time + 6*3 servo bytes)
+      const pkt = [
+        0x55, 0x55, 0x16, 0x03, 0x06,
+        durationMs & 0xFF, (durationMs >> 8) & 0xFF
+      ];
+      JOINTS.forEach(j => {
+        const p = positionsMap[j.id];
+        pkt.push(j.id, p & 0xFF, (p >> 8) & 0xFF);
+      });
+      sendPacket(pkt);
+    }
+
+    function runActionGroup(groupId) {
+      // Length = 0x04 (1 cmd + 1 group + 2 repeat count)
+      sendPacket([0x55, 0x55, 0x04, 0x06, groupId, 0x01, 0x00]);
+    }
+
+    function unloadAllServos() {
+      // Length = 0x08 (1 cmd + 1 count + 6 IDs)
+      sendPacket([0x55, 0x55, 0x08, 0x14, 0x06, 1, 2, 3, 4, 5, 6]);
+    }
+
+    function setConnectedUI(connected) {
+      if (connected) {
+        statusBadge.textContent = "Connected (9600 baud)";
+        statusBadge.className = "badge ok";
+        connectBtn.textContent = "Disconnect";
+        connectBtn.className = "btn-danger";
+      } else {
+        statusBadge.textContent = "Disconnected";
+        statusBadge.className = "badge";
+        connectBtn.textContent = "Connect USB-C";
+        connectBtn.className = "btn-primary";
+        port = null;
+      }
+    }
+
+    connectBtn.addEventListener("click", async () => {
+      if (port) {
+        try { await port.close(); } catch (_) {}
+        setConnectedUI(false);
+        logMsg("Disconnected from USB-C.");
+        return;
+      }
+
+      if (!("serial" in navigator)) {
+        logMsg("Web Serial API is not supported or blocked in this frame.");
+        alert("Web Serial is unavailable. Make sure you opened your GitHub Pages link directly in Chrome (not inside Google Sites).");
+        return;
+      }
+
+      try {
+        port = await navigator.serial.requestPort();
+        await port.open({ baudRate: 9600 });
+        setConnectedUI(true);
+        logMsg("Connected at 9600 baud. Press K1 twice if ESP32 rebooted.");
+      } catch (err) {
+        port = null;
+        if (err.name !== "NotFoundError") {
+          logMsg(`Connection failed: ${err.message}`);
+        }
+      }
+    });
+
+    function buildSliders() {
+      const { min, max, mid, step } = getRange();
+      slidersContainer.innerHTML = "";
+
+      JOINTS.forEach(j => {
+        const card = document.createElement("div");
+        card.className = "joint";
+        card.innerHTML = `
+          <div class="joint-top">
+            <span>${j.name}</span>
+            <span class="joint-val" id="val-${j.id}">${mid}</span>
+          </div>
+          <div class="joint-controls">
+            <button class="btn-secondary btn-sm" id="dec-${j.id}">-${step}</button>
+            <input type="range" id="rng-${j.id}" min="${min}" max="${max}" value="${mid}" />
+            <button class="btn-secondary btn-sm" id="inc-${j.id}">+${step}</button>
+            <button class="btn-secondary btn-sm" id="mid-${j.id}">Mid</button>
+          </div>
+        `;
+        slidersContainer.appendChild(card);
+
+        const rng = card.querySelector(`#rng-${j.id}`);
+        const val = card.querySelector(`#val-${j.id}`);
+
+        const updateJoint = (newVal, duration) => {
+          const clamped = Math.max(min, Math.min(max, Number(newVal)));
+          rng.value = clamped;
+          val.textContent = clamped;
+          moveSingleServo(j.id, clamped, duration);
+        };
+
+        rng.addEventListener("input", () => {
+          val.textContent = rng.value;
+          const now = Date.now();
+          if (now - lastThrottle > 55) {
+            lastThrottle = now;
+            moveSingleServo(j.id, Number(rng.value), 120);
+          }
+        });
+
+        rng.addEventListener("change", () => {
+          updateJoint(rng.value, Number(moveSpeedEl.value));
+        });
+
+        card.querySelector(`#dec-${j.id}`).onclick = () => updateJoint(Number(rng.value) - step, 250);
+        card.querySelector(`#inc-${j.id}`).onclick = () => updateJoint(Number(rng.value) + step, 250);
+        card.querySelector(`#mid-${j.id}`).onclick = () => updateJoint(mid, Number(moveSpeedEl.value));
+      });
+    }
+
+    function getCurrentPositions() {
+      const pos = {};
+      JOINTS.forEach(j => {
+        pos[j.id] = Number(document.getElementById(`rng-${j.id}`).value);
+      });
+      return pos;
+    }
+
+    function applyPositionsToUI(posMap) {
+      JOINTS.forEach(j => {
+        const val = posMap[j.id];
+        document.getElementById(`rng-${j.id}`).value = val;
+        document.getElementById(`val-${j.id}`).textContent = val;
+      });
+    }
+
+    document.getElementById("centerAllBtn").addEventListener("click", () => {
+      const { mid } = getRange();
+      const pos = {};
+      JOINTS.forEach(j => { pos[j.id] = mid; });
+      applyPositionsToUI(pos);
+      moveAllServos(pos, Number(moveSpeedEl.value));
+    });
+
+    document.getElementById("relaxBtn").addEventListener("click", () => {
+      unloadAllServos();
+    });
+
+    servoModeEl.addEventListener("change", buildSliders);
+
+    // Pose Sequencer Logic
+    function renderPoses() {
+      if (savedPoses.length === 0) {
+        poseListEl.innerHTML = `<div style="color:var(--muted);font-size:0.82rem;">No poses saved yet. Move sliders and click "+ Save Current Pose".</div>`;
+        return;
+      }
+      poseListEl.innerHTML = "";
+      savedPoses.forEach((pose, idx) => {
+        const item = document.createElement("div");
+        item.className = "pose-item";
+        const summary = JOINTS.map(j => `${j.id}:${pose[j.id]}`).join(" ");
+        item.innerHTML = `
+          <span><strong>#${idx + 1}</strong> &nbsp;<span style="color:var(--muted);font-family:monospace;">${summary}</span></span>
+          <div class="row">
+            <button class="btn-secondary btn-sm" data-run="${idx}">Go</button>
+            <button class="btn-danger btn-sm" data-del="${idx}">X</button>
+          </div>
+        `;
+        item.querySelector("[data-run]").onclick = () => {
+          applyPositionsToUI(pose);
+          moveAllServos(pose, Number(moveSpeedEl.value));
+        };
+        item.querySelector("[data-del]").onclick = () => {
+          savedPoses.splice(idx, 1);
+          renderPoses();
+        };
+        poseListEl.appendChild(item);
+      });
+    }
+
+    document.getElementById("savePoseBtn").addEventListener("click", () => {
+      savedPoses.push(getCurrentPositions());
+      renderPoses();
+      logMsg(`Saved Pose #${savedPoses.length}`);
+    });
+
+    document.getElementById("clearPosesBtn").addEventListener("click", () => {
+      savedPoses = [];
+      renderPoses();
+    });
+
+    const playSeqBtn = document.getElementById("playSeqBtn");
+    const stopSeqBtn = document.getElementById("stopSeqBtn");
+
+    playSeqBtn.addEventListener("click", async () => {
+      if (savedPoses.length === 0 || isPlaying) return;
+      isPlaying = true;
+      playSeqBtn.disabled = true;
+      stopSeqBtn.disabled = false;
+
+      do {
+        for (let i = 0; i < savedPoses.length; i++) {
+          if (!isPlaying) break;
+          const dur = Number(moveSpeedEl.value);
+          applyPositionsToUI(savedPoses[i]);
+          moveAllServos(savedPoses[i], dur);
+          await new Promise(r => setTimeout(r, dur + 200));
+        }
+      } while (isPlaying && document.getElementById("loopSeq").checked);
+
+      isPlaying = false;
+      playSeqBtn.disabled = false;
+      stopSeqBtn.disabled = true;
+    });
+
+    stopSeqBtn.addEventListener("click", () => {
+      isPlaying = false;
+    });
+
+    // Built-in Action Group Buttons (0 - 5)
+    const groupBtns = document.getElementById("groupBtns");
+    for (let g = 0; g <= 5; g++) {
+      const b = document.createElement("button");
+      b.className = "btn-secondary btn-sm";
+      b.textContent = `Group ${g}`;
+      b.onclick = () => runActionGroup(g);
+      groupBtns.appendChild(b);
+    }
+
+    document.getElementById("copyHexBtn").addEventListener("click", () => {
+      navigator.clipboard.writeText(latestHexEl.textContent);
+      logMsg("Copied latest HEX packet to clipboard.");
+    });
+
+    buildSliders();
+  </script>
+</body>
+</html>
