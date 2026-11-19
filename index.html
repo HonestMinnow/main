@@ -26,7 +26,7 @@
       color: var(--text);
       line-height: 1.4;
     }
-    .container { max-width: 1060px; margin: 0 auto; }
+    .container { max-width: 1040px; margin: 0 auto; }
     header {
       display: flex;
       flex-wrap: wrap;
@@ -63,7 +63,7 @@
     .toolbar {
       display: flex;
       flex-wrap: wrap;
-      gap: 8px;
+      gap: 9px;
       align-items: center;
       background: var(--card);
       border: 1px solid var(--border);
@@ -76,7 +76,7 @@
       font-size: 0.85rem;
       border-radius: 8px;
       border: 1px solid var(--border);
-      padding: 8px 12px;
+      padding: 8px 13px;
       color: var(--text);
       background: var(--card-alt);
     }
@@ -323,27 +323,15 @@
     </header>
 
     <div class="steps">
-      <strong>Quick Test:</strong>
-      1. Choose <strong>Baud Rate</strong> &amp; click <strong>Connect USB-C</strong> &nbsp;→&nbsp;
-      2. Press <strong>K1 twice</strong> on the main board (2 short beeps) &nbsp;→&nbsp;
-      3. Click <strong>Test Base Sweep</strong>. Switch the <strong>Protocol</strong> dropdown if the sweep doesn't move smoothly left &amp; right.
+      <strong>Setup:</strong>
+      1. Turn ON <strong>7.5V DC power</strong> &nbsp;→&nbsp;
+      2. Click <strong>Connect USB-C</strong> (9600 baud) &nbsp;→&nbsp;
+      3. Press <strong>K1 twice</strong> on the main board (2 short beeps).
     </div>
 
     <div class="toolbar">
-      <select id="baudRate" title="USB Serial Baud Rate">
-        <option value="115200" selected>115200 baud (ESP32)</option>
-        <option value="9600">9600 baud (Legacy)</option>
-      </select>
       <button id="connectBtn" class="btn-primary">Connect USB-C</button>
-      <select id="protocolMode" title="Servo Command Protocol">
-        <option value="bus_le_7" selected>Bus Controller (0–1000, Len 0x07/0x16)</option>
-        <option value="bus_le_8">Bus Controller (0–1000, Len 0x08/0x17)</option>
-        <option value="bus_be">Bus Controller (0–1000, High-Low)</option>
-        <option value="bus_direct">Direct Bus Servo (0–1000, Checksum)</option>
-        <option value="pwm_le">Legacy PWM (500–2500, Len 0x08/0x17)</option>
-      </select>
-      <button id="testSweepBtn" class="btn-secondary">Test Base Sweep</button>
-      <button id="centerAllBtn" class="btn-secondary">Center All</button>
+      <button id="centerAllBtn" class="btn-secondary">Center All (500)</button>
       <button id="relaxBtn" class="btn-danger">Relax Motors</button>
       <button id="kbToggleBtn" class="btn-secondary">⌨️ Keyboard: OFF</button>
     </div>
@@ -382,7 +370,7 @@
       <div style="display:flex;flex-direction:column;gap:14px;">
         <div class="panel">
           <h2>
-            <span>Joint Sliders (ID 1 – 6)</span>
+            <span>Joint Sliders (ID 1 – 6 • Range 0 – 1000)</span>
             <span style="font-size:0.77rem;color:var(--muted);font-weight:400;">Live control</span>
           </h2>
           <div id="slidersContainer"></div>
@@ -393,9 +381,9 @@
             <span>Keyboard Controls &amp; Keybinds</span>
             <div class="row">
               <select id="kbSpeed" class="btn-sm" title="Keyboard Movement Speed">
-                <option value="12">Slow Glide</option>
-                <option value="24" selected>Normal Glide</option>
-                <option value="40">Fast Glide</option>
+                <option value="10">Slow Glide</option>
+                <option value="20" selected>Normal Glide</option>
+                <option value="35">Fast Glide</option>
               </select>
               <button id="resetKeysBtn" class="btn-secondary btn-sm">Reset Keys</button>
             </div>
@@ -434,9 +422,9 @@
               <button id="copyHexBtn" class="btn-secondary btn-sm">Copy HEX</button>
             </div>
           </h2>
-          <div id="latestHex" class="hex-box">55 55 16 03 06 58 02 01 F4 01 02 F4 01 03 F4 01 04 F4 01 05 F4 01 06 F4 01</div>
+          <div id="latestHex" class="hex-box">55 55 17 03 06 8A 02 01 F4 01 02 F4 01 03 F4 01 04 F4 01 05 F4 01 06 F4 01</div>
           <div class="hex-input-row">
-            <input type="text" id="rawHexInput" placeholder="e.g. 55 55 07 03 01 E8 03 06 F4 01" />
+            <input type="text" id="rawHexInput" placeholder="e.g. 55 55 08 03 01 E8 03 06 F4 01" />
             <button id="sendRawHexBtn" class="btn-primary btn-sm">Send HEX</button>
           </div>
           <div id="serialLog" class="log"></div>
@@ -491,13 +479,18 @@
       act_play: "Space"
     };
 
+    const BAUD_RATE = 9600;
+    const SERVO_MIN = 0;
+    const SERVO_MAX = 1000;
+    const SERVO_MID = 500;
+    const SERVO_STEP = 25;
+
     let keybinds = { ...DEFAULT_KEYBINDS };
     let keyboardEnabled = false;
     let listeningActionId = null;
     const pressedCodes = new Set();
 
     let port = null;
-    let connectedBaud = 115200;
     let activeReader = null;
     let readLoopDone = Promise.resolve();
     let writeQueue = Promise.resolve();
@@ -507,19 +500,15 @@
     let recordedFrames = [];
     let isRecording = false;
     let isPlaying = false;
-    let isSweeping = false;
     let recordStartTime = 0;
     let recTimerInterval = null;
     let abortPlaybackController = null;
 
     const statusBadge = document.getElementById("statusBadge");
-    const baudRateEl = document.getElementById("baudRate");
     const connectBtn = document.getElementById("connectBtn");
-    const testSweepBtn = document.getElementById("testSweepBtn");
     const kbToggleBtn = document.getElementById("kbToggleBtn");
     const kbSpeedEl = document.getElementById("kbSpeed");
     const kbGrid = document.getElementById("kbGrid");
-    const protocolModeEl = document.getElementById("protocolMode");
     const slidersContainer = document.getElementById("slidersContainer");
     const latestHexEl = document.getElementById("latestHex");
     const serialLogEl = document.getElementById("serialLog");
@@ -535,15 +524,8 @@
     const playProgress = document.getElementById("playProgress");
     const recDataBox = document.getElementById("recDataBox");
 
-    function getRange() {
-      return protocolModeEl.value === "pwm_le"
-        ? { min: 500, max: 2500, mid: 1500, step: 50 }
-        : { min: 0, max: 1000, mid: 500, step: 25 };
-    }
-
     function clampVal(val) {
-      const { min, max } = getRange();
-      return Math.max(min, Math.min(max, Math.round(Number(val) || 0)));
+      return Math.max(SERVO_MIN, Math.min(SERVO_MAX, Math.round(Number(val) || 0)));
     }
 
     function clampDuration(ms) {
@@ -628,79 +610,22 @@
       });
     }
 
-    function buildDirectBusServoPacket(id, pos, durationMs) {
-      const pL = pos & 0xFF;
-      const pH = (pos >> 8) & 0xFF;
-      const dL = durationMs & 0xFF;
-      const dH = (durationMs >> 8) & 0xFF;
-      const len = 0x07;
-      const cmd = 0x01; // SERVO_MOVE_TIME_WRITE
-      const checksum = (~(id + len + cmd + pL + pH + dL + dH)) & 0xFF;
-      return [0x55, 0x55, id, len, cmd, pL, pH, dL, dH, checksum];
-    }
-
+    // Verified Bus Controller Protocol (0-1000, Low-High, Len 0x08 / 0x17)
     function moveSingleServo(id, pos, durationMs, throttleLog = false) {
       const p = clampVal(pos);
       const d = clampDuration(durationMs);
-      const mode = protocolModeEl.value;
-
-      if (mode === "bus_direct") {
-        sendPacket(buildDirectBusServoPacket(id, p, d), throttleLog);
-      } else if (mode === "bus_be") {
-        sendPacket([
-          0x55, 0x55, 0x08, 0x03, 0x01,
-          (d >> 8) & 0xFF, d & 0xFF,
-          id,
-          (p >> 8) & 0xFF, p & 0xFF
-        ], throttleLog);
-      } else if (mode === "bus_le_7") {
-        sendPacket([
-          0x55, 0x55, 0x07, 0x03, 0x01,
-          d & 0xFF, (d >> 8) & 0xFF,
-          id,
-          p & 0xFF, (p >> 8) & 0xFF
-        ], throttleLog);
-      } else {
-        // bus_le_8 and pwm_le
-        sendPacket([
-          0x55, 0x55, 0x08, 0x03, 0x01,
-          d & 0xFF, (d >> 8) & 0xFF,
-          id,
-          p & 0xFF, (p >> 8) & 0xFF
-        ], throttleLog);
-      }
+      sendPacket([
+        0x55, 0x55, 0x08, 0x03, 0x01,
+        d & 0xFF, (d >> 8) & 0xFF,
+        id,
+        p & 0xFF, (p >> 8) & 0xFF
+      ], throttleLog);
     }
 
     function moveAllServos(positionsMap, durationMs, throttleLog = false) {
       const d = clampDuration(durationMs);
-      const mode = protocolModeEl.value;
-
-      if (mode === "bus_direct") {
-        const combined = [];
-        JOINTS.forEach(j => {
-          const p = clampVal(positionsMap[j.id]);
-          combined.push(...buildDirectBusServoPacket(j.id, p, d));
-        });
-        sendPacket(combined, throttleLog);
-        return;
-      }
-
-      if (mode === "bus_be") {
-        const pkt = [
-          0x55, 0x55, 0x17, 0x03, 0x06,
-          (d >> 8) & 0xFF, d & 0xFF
-        ];
-        JOINTS.forEach(j => {
-          const p = clampVal(positionsMap[j.id]);
-          pkt.push(j.id, (p >> 8) & 0xFF, p & 0xFF);
-        });
-        sendPacket(pkt, throttleLog);
-        return;
-      }
-
-      const lenByte = mode === "bus_le_7" ? 0x16 : 0x17;
       const pkt = [
-        0x55, 0x55, lenByte, 0x03, 0x06,
+        0x55, 0x55, 0x17, 0x03, 0x06,
         d & 0xFF, (d >> 8) & 0xFF
       ];
       JOINTS.forEach(j => {
@@ -711,38 +636,25 @@
     }
 
     function runActionGroup(groupId) {
-      const lenByte = protocolModeEl.value === "bus_le_7" ? 0x04 : 0x05;
-      sendPacket([0x55, 0x55, lenByte, 0x06, groupId, 0x01, 0x00]);
+      sendPacket([0x55, 0x55, 0x05, 0x06, groupId, 0x01, 0x00]);
     }
 
     function unloadAllServos() {
       stopRecordingOrPlayback();
-      if (protocolModeEl.value === "bus_direct") {
-        const combined = [];
-        JOINTS.forEach(j => {
-          const checksum = (~(j.id + 0x04 + 0x1F + 0x00)) & 0xFF;
-          combined.push(0x55, 0x55, j.id, 0x04, 0x1F, 0x00, checksum);
-        });
-        sendPacket(combined);
-      } else {
-        const lenByte = protocolModeEl.value === "bus_le_7" ? 0x08 : 0x09;
-        sendPacket([0x55, 0x55, lenByte, 0x14, 0x06, 1, 2, 3, 4, 5, 6]);
-      }
+      sendPacket([0x55, 0x55, 0x09, 0x14, 0x06, 1, 2, 3, 4, 5, 6]);
     }
 
     function setConnectedUI(connected) {
       if (connected) {
-        statusBadge.textContent = `Connected (${connectedBaud} baud)`;
+        statusBadge.textContent = `Connected (${BAUD_RATE} baud)`;
         statusBadge.className = "badge ok";
         connectBtn.textContent = "Disconnect";
         connectBtn.className = "btn-danger";
-        baudRateEl.disabled = true;
       } else {
         statusBadge.textContent = "Disconnected";
         statusBadge.className = "badge";
         connectBtn.textContent = "Connect USB-C";
         connectBtn.className = "btn-primary";
-        baudRateEl.disabled = false;
       }
     }
 
@@ -830,9 +742,8 @@
         return;
       }
       try {
-        connectedBaud = Number(baudRateEl.value) || 115200;
         const selectedPort = await navigator.serial.requestPort();
-        await selectedPort.open({ baudRate: connectedBaud });
+        await selectedPort.open({ baudRate: BAUD_RATE });
         try {
           await selectedPort.setSignals({ dataTerminalReady: false, requestToSend: false });
         } catch (_) {}
@@ -840,7 +751,7 @@
         writeQueue = Promise.resolve();
         readLoopDone = startBackgroundReadLoop(port);
         setConnectedUI(true);
-        logMsg(`Connected at ${connectedBaud} baud.`);
+        logMsg(`Connected at ${BAUD_RATE} baud.`);
       } catch (err) {
         port = null;
         if (err.name !== "NotFoundError") logMsg(`Connection Error: ${err.message}`);
@@ -923,11 +834,11 @@
         const json = JSON.stringify(recordedFrames);
         recDataBox.value = json;
         try {
-          localStorage.setItem("learm_recording_v4", json);
+          localStorage.setItem("learm_recording_final", json);
         } catch (_) {}
       } else {
         recDataBox.value = "";
-        try { localStorage.removeItem("learm_recording_v4"); } catch (_) {}
+        try { localStorage.removeItem("learm_recording_final"); } catch (_) {}
       }
     }
 
@@ -986,7 +897,7 @@
     }
 
     async function playRecording() {
-      if (isRecording || isPlaying || isSweeping || !hasAnyMovement(recordedFrames)) return;
+      if (isRecording || isPlaying || !hasAnyMovement(recordedFrames)) return;
       isPlaying = true;
       abortPlaybackController = new AbortController();
       const signal = abortPlaybackController.signal;
@@ -1069,14 +980,6 @@
           alert("Invalid recording format.");
           return;
         }
-        const { max } = getRange();
-        const hasOutOfRange = parsed.some(frame =>
-          JOINTS.some(j => Number(frame.pos[j.id]) > max)
-        );
-        if (hasOutOfRange && max === 1000) {
-          alert("This recording contains values above 1000 (from 500–2500 mode). Switch the Protocol dropdown to 'Legacy PWM (500–2500)' before loading it.");
-          return;
-        }
         const cleaned = parsed.map(frame => {
           const cleanPos = {};
           JOINTS.forEach(j => {
@@ -1098,9 +1001,8 @@
     });
 
     function centerAllJoints() {
-      const { mid } = getRange();
       const pos = {};
-      JOINTS.forEach(j => { pos[j.id] = mid; });
+      JOINTS.forEach(j => { pos[j.id] = SERVO_MID; });
       applyPositionsToUI(pos);
       moveAllServos(pos, 650, false);
       captureFrameIfRecording(false);
@@ -1108,39 +1010,12 @@
 
     document.getElementById("centerAllBtn").addEventListener("click", centerAllJoints);
 
-    testSweepBtn.addEventListener("click", async () => {
-      if (isSweeping || isPlaying) return;
-      isSweeping = true;
-      testSweepBtn.disabled = true;
-
-      try {
-        const { mid } = getRange();
-        const offset = protocolModeEl.value === "pwm_le" ? 350 : 180;
-        const setBase = val => {
-          document.getElementById("rng-6").value = val;
-          document.getElementById("val-6").textContent = val;
-          moveSingleServo(6, val, 500, false);
-          captureFrameIfRecording(false);
-        };
-        logMsg("Running Base (ID 6) sweep test: Left -> Right -> Center...");
-        setBase(mid - offset);
-        await new Promise(r => setTimeout(r, 650));
-        setBase(mid + offset);
-        await new Promise(r => setTimeout(r, 650));
-        setBase(mid);
-      } finally {
-        isSweeping = false;
-        testSweepBtn.disabled = false;
-      }
-    });
-
     document.getElementById("relaxBtn").addEventListener("click", () => {
       unloadAllServos();
       logMsg("Motors relaxed.");
     });
 
     function buildSliders() {
-      const { min, max, mid, step } = getRange();
       slidersContainer.innerHTML = "";
 
       JOINTS.forEach(j => {
@@ -1149,12 +1024,12 @@
         card.innerHTML = `
           <div class="joint-top">
             <span>${j.name}</span>
-            <span class="joint-val" id="val-${j.id}">${mid}</span>
+            <span class="joint-val" id="val-${j.id}">${SERVO_MID}</span>
           </div>
           <div class="joint-controls">
-            <button class="btn-secondary btn-sm" id="dec-${j.id}">-${step}</button>
-            <input type="range" id="rng-${j.id}" min="${min}" max="${max}" value="${mid}" />
-            <button class="btn-secondary btn-sm" id="inc-${j.id}">+${step}</button>
+            <button class="btn-secondary btn-sm" id="dec-${j.id}">-${SERVO_STEP}</button>
+            <input type="range" id="rng-${j.id}" min="${SERVO_MIN}" max="${SERVO_MAX}" value="${SERVO_MID}" />
+            <button class="btn-secondary btn-sm" id="inc-${j.id}">+${SERVO_STEP}</button>
             <button class="btn-secondary btn-sm" id="mid-${j.id}">Mid</button>
           </div>
         `;
@@ -1185,9 +1060,9 @@
           moveJoint(rng.value, 320);
         });
 
-        card.querySelector(`#dec-${j.id}`).onclick = () => moveJoint(Number(rng.value) - step, 300);
-        card.querySelector(`#inc-${j.id}`).onclick = () => moveJoint(Number(rng.value) + step, 300);
-        card.querySelector(`#mid-${j.id}`).onclick = () => moveJoint(mid, 550);
+        card.querySelector(`#dec-${j.id}`).onclick = () => moveJoint(Number(rng.value) - SERVO_STEP, 300);
+        card.querySelector(`#inc-${j.id}`).onclick = () => moveJoint(Number(rng.value) + SERVO_STEP, 300);
+        card.querySelector(`#mid-${j.id}`).onclick = () => moveJoint(SERVO_MID, 550);
       });
     }
 
@@ -1371,10 +1246,9 @@
     });
 
     setInterval(() => {
-      if (!keyboardEnabled || isPlaying || isSweeping || listeningActionId || pressedCodes.size === 0) return;
+      if (!keyboardEnabled || isPlaying || listeningActionId || pressedCodes.size === 0) return;
 
-      const scale = protocolModeEl.value === "pwm_le" ? 1.5 : 0.75;
-      const stepPerTick = Math.max(8, Math.round(Number(kbSpeedEl.value) * scale));
+      const stepPerTick = Number(kbSpeedEl.value) || 20;
       const currentPos = getCurrentPositions();
       const changedJoints = [];
 
@@ -1404,16 +1278,6 @@
       }
     }, 100);
 
-    baudRateEl.addEventListener("change", () => {
-      try { localStorage.setItem("learm_baud_v4", baudRateEl.value); } catch (_) {}
-    });
-
-    protocolModeEl.addEventListener("change", () => {
-      try { localStorage.setItem("learm_protocol_v4", protocolModeEl.value); } catch (_) {}
-      buildSliders();
-      logMsg(`Protocol: ${protocolModeEl.options[protocolModeEl.selectedIndex].text}`);
-    });
-
     const groupBtns = document.getElementById("groupBtns");
     for (let g = 0; g <= 5; g++) {
       const b = document.createElement("button");
@@ -1435,7 +1299,7 @@
     function sendRawHexFromInput() {
       const cleaned = document.getElementById("rawHexInput").value.replace(/[^0-9a-fA-F]/g, "");
       if (!cleaned || cleaned.length % 2 !== 0) {
-        alert("Enter a valid HEX string (even number of hex characters, e.g. 55 55 07 03 01 E8 03 06 F4 01).");
+        alert("Enter a valid HEX string (even number of hex characters, e.g. 55 55 08 03 01 E8 03 06 F4 01).");
         return;
       }
       const bytes = [];
@@ -1454,15 +1318,7 @@
     });
 
     try {
-      const savedBaud = localStorage.getItem("learm_baud_v4");
-      if (savedBaud === "115200" || savedBaud === "9600") {
-        baudRateEl.value = savedBaud;
-      }
-      const savedProto = localStorage.getItem("learm_protocol_v4");
-      if (savedProto && protocolModeEl.querySelector(`option[value="${savedProto}"]`)) {
-        protocolModeEl.value = savedProto;
-      }
-      const savedRec = localStorage.getItem("learm_recording_v4");
+      const savedRec = localStorage.getItem("learm_recording_final");
       if (savedRec) {
         const parsed = JSON.parse(savedRec);
         if (hasAnyMovement(parsed)) {
